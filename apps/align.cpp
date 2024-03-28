@@ -1,5 +1,4 @@
 #include <iostream>
-//#include <ros/ros.h>
 #include <rclcpp/rclcpp.hpp>
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
@@ -11,7 +10,6 @@
 
 #include <pclomp/ndt_omp.h>
 #include <pclomp/gicp_omp.h>
-
 #include <std_msgs/msg/string.hpp>
 
 // FUNCTION: align point clouds and measure processing time
@@ -80,7 +78,6 @@ int main(int argc, char** argv) {
 
   std::vector<int> num_threads = {1, omp_get_max_threads()};
   std::vector<std::pair<std::string, pclomp::NeighborSearchMethod>> search_methods = {
-    // {"KDTREE", pclomp::KDTREE},
     // {"DIRECT7", pclomp::DIRECT7},
     {"DIRECT1", pclomp::DIRECT1}
   };
@@ -96,7 +93,12 @@ int main(int argc, char** argv) {
       aligned = align(ndt_omp, target_cloud, source_cloud);
     }
   }
-  
+
+  // ADDED BY JP:
+  const Eigen::Matrix<float, 4, 4>& trans_matrix = ndt_omp->printFinalTransformation();
+  std::cout << "Transformation Matrix:" << std::endl;
+  std::cout << trans_matrix << std::endl;
+  // ADDED BY JP:
 
   // visulization: Yellow is aligned to red as color blue
   pcl::visualization::PCLVisualizer vis("vis");

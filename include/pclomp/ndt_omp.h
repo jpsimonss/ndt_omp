@@ -203,6 +203,15 @@ namespace pclomp
 			return (nr_iterations_);
 		}
 
+		//  ADDED BY JP:
+		inline const Eigen::Matrix<float, 4, 4>& 
+			printFinalTransformation() const 
+		{
+			return (final_transformation_);
+		}
+		//  ADDED BY JP
+
+
 		/** \brief Convert 6 element transformation vector to affine transformation.
 		  * \param[in] x transformation vector of the form [x, y, z, roll, pitch, yaw]
 		  * \param[out] trans affine transform corresponding to given transfomation vector
@@ -227,6 +236,8 @@ namespace pclomp
 			convertTransform(x, _affine);
 			trans = _affine.matrix();
 		}
+
+
 
 		// negative log likelihood function
 		// lower is better
