@@ -19,6 +19,10 @@ set(CMAKE_BUILD_TYPE "RELEASE")
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(pcl_conversions REQUIRED)
 
 find_package(PCL 1.12 REQUIRED)
 include_directories(${PCL_INCLUDE_DIRS})
@@ -70,6 +74,10 @@ target_link_libraries(align
 ament_target_dependencies(align
   rclcpp
   std_msgs
+  tf2
+  tf2_ros
+  sensor_msgs
+  pcl_conversions
 )
 
 ############

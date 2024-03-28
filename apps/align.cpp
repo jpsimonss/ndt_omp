@@ -12,6 +12,87 @@
 #include <pclomp/gicp_omp.h>
 #include <std_msgs/msg/string.hpp>
 
+// NEW by JP:
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <tf2_ros/transform_broadcaster.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <pcl/PCLPointCloud2.h>
+#include <pcl_conversions/pcl_conversions.h>
+
+// IF EIGEN issues: IN TERMINAL:
+  // sudo ln -s /usr/include/eigen3/Eigen /usr/include/Eigen
+  // sudo ln -s /usr/include/eigen3/unsupported/Eigen /usr/include/unsupported/Eigen
+
+
+class PointCloudAligner : public rclcpp::Node
+{
+public:
+    PointCloudAligner() : Node("pcl_align")
+    {
+        // Subscribe to the left and right point cloud topics
+        subscription_L_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
+            "/input_cloud_1",
+            10,
+            std::bind(&PointCloudAligner::leftCallback, this, std::placeholders::_1));
+
+        subscription_R_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
+            "/input_cloud_2",
+            10,
+            std::bind(&PointCloudAligner::rightCallback, this, std::placeholders::_1));
+
+        // Publish the combined point cloud
+        publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/output_cloud", 10);
+    }
+
+private:
+    void leftCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
+    {
+        left_cloud_ = *msg;
+        concatenateAndPublish();
+    }
+
+    void rightCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
+    {
+        right_cloud_ = *msg;
+        // concatenateAndPublish();
+    }
+
+    void concatenateAndPublish()
+    {
+        if (!left_cloud_.data.empty() && !right_cloud_.data.empty())
+        {   
+            long int left_timestamp = left_cloud_.header.stamp.nanosec;
+            long int right_timestamp = right_cloud_.header.stamp.nanosec;
+            
+            // Convert nanoseconds to seconds
+            long double time_difference = std::abs(left_timestamp - right_timestamp) * 1e-9; 
+            std::cout << "Time difference:" << time_difference << " s" << std::endl;
+
+            if (time_difference < 0.001) // seconds
+            {
+                
+                sensor_msgs::msg::PointCloud2 combined_cloud;
+                if (pcl::concatenatePointCloud(left_cloud_, right_cloud_, combined_cloud)) {
+                    combined_cloud.header = left_cloud_.header;
+                    publisher_->publish(combined_cloud); }
+                else {
+                    std::cerr << "Error concatenating point clouds." << std::endl;
+                }
+            }
+        }
+    }
+
+    sensor_msgs::msg::PointCloud2 left_cloud_;
+    sensor_msgs::msg::PointCloud2 right_cloud_;
+
+    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_L_;
+    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_R_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher_;
+};
+
+
+
+
 // FUNCTION: align point clouds and measure processing time
 pcl::PointCloud<pcl::PointXYZ>::Ptr align(boost::shared_ptr<pcl::Registration<pcl::PointXYZ, pcl::PointXYZ>> registration, 
                                           const pcl::PointCloud<pcl::PointXYZ>::Ptr& target_cloud, 
@@ -98,7 +179,7 @@ int main(int argc, char** argv) {
   const Eigen::Matrix<float, 4, 4>& trans_matrix = ndt_omp->printFinalTransformation();
   std::cout << "Transformation Matrix:" << std::endl;
   std::cout << trans_matrix << std::endl;
-  // ADDED BY JP:
+  // ADDED BY JP
 
   // visulization: Yellow is aligned to red as color blue
   pcl::visualization::PCLVisualizer vis("vis");
