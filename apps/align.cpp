@@ -18,6 +18,7 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <pcl/PCLPointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <rclcpp/qos.hpp>
 
 // IF EIGEN issues::
   // sudo ln -s /usr/include/eigen3/Eigen /usr/include/Eigen
@@ -171,48 +172,53 @@ sensor_msgs::msg::PointCloud2 transformPointCloud(const sensor_msgs::msg::PointC
 
 
 class PointCloudAligner : public rclcpp::Node
+
 {
 public:
     PointCloudAligner() : Node("pcl_concat") {
         
-        // Subscribe to the RS_Lidar topics
+        // SUBSCRIBERS
         subscription_L_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            "/rslidar/helios_L",
-            10,
-            std::bind(&PointCloudAligner::leftCallback, this, std::placeholders::_1));
+            "/rslidar/helios_L", //topic_name,
+            1,                  // qos_history_depth
+            std::bind(&PointCloudAligner::leftCallback, this, std::placeholders::_1) // callback
+            ); 
 
         subscription_R_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
             "/rslidar/helios_R",
-            10,
-            std::bind(&PointCloudAligner::rightCallback, this, std::placeholders::_1));
+            1,
+            std::bind(&PointCloudAligner::rightCallback, this, std::placeholders::_1)
+            );
         
         subscription_front_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
             "/rslidar/M1P",
-            10,
+            1,
             std::bind(&PointCloudAligner::frontCallback, this, std::placeholders::_1));
 
-        // Publish the combined point cloud
-        publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/rslidar/combined", 10);
+        // publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
+        //     "/rslidar/combined", // topic_name
+        //     10 // qos_history_depth
+        //     );
+
+        // PUBLISHER
+        rclcpp::QoS qos_profile(10); // history_depth
+        qos_profile.durability(rmw_qos_durability_policy_t::RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL); 
+        publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
+            "/rslidar/combined", // topic_name
+            qos_profile // QoS profile // qos_history_depth
+            );
     }
-
-
 
 private:
     void leftCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
-    {
-        left_cloud_ = *msg;
-        AlignAndPublish();
-    }
+    {left_cloud_ = *msg;}
 
     void rightCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
-    {
-        right_cloud_ = *msg;
-    }
+    {right_cloud_ = *msg;}
 
     void frontCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
-    {
-        front_cloud_ = *msg;
-    }
+    {front_cloud_ = *msg;
+    AlignAndPublish();}
 
 
     void AlignAndPublish()
@@ -231,20 +237,17 @@ private:
             std::cout << "Max time difference:" << max_difference << " s" << std::endl;
 
             // if (max_difference < 0.0015) // seconds
-            if (max_difference < 0.01)
-            {
+            if (max_difference < 0.001) {
+
             // 1) Concat helios L + helios R
                 sensor_msgs::msg::PointCloud2 combined_cloud_back;
                 if (pcl::concatenatePointCloud(left_cloud_, right_cloud_, combined_cloud_back)) {
                     combined_cloud_back.header = left_cloud_.header;
                     }
                 
-                else {
-                    std::cerr << "Error concatenating point clouds." << std::endl;
-                }
+                else {std::cerr << "Error concatenating point clouds." << std::endl;}
 
             // 2) Calculate TF
-                // Source = M1P , Target = heliosL+R
                 const Eigen::Matrix<float, 4, 4>& tf = calculate_tf(combined_cloud_back, front_cloud_);
 
             // 3) Transform M1P 
@@ -252,13 +255,11 @@ private:
 
             // 4) Concat HeliosL+R + M1P + PUBLISH
                 sensor_msgs::msg::PointCloud2 combined_cloud_all;
-                if (pcl::concatenatePointCloud(left_cloud_, right_cloud_, combined_cloud_all)) {
-                    combined_cloud_all.header = left_cloud_.header;
+                if (pcl::concatenatePointCloud(front_cloud, combined_cloud_back, combined_cloud_all)) {
+                    combined_cloud_all.header = front_cloud_.header;
                     publisher_->publish(combined_cloud_all); 
                     }
-                else {
-                    std::cerr << "Error concatenating point clouds." << std::endl;
-                }
+                else {std::cerr << "Error concatenating point clouds." << std::endl;}
             }
         }
     }
