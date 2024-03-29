@@ -126,8 +126,8 @@ const Eigen::Matrix<float, 4, 4>& calculate_tf(const sensor_msgs::msg::PointClou
 // ----------------------
 // FUNCTION: Transform sensor_msgs::msg::PointCloud2
 // ----------------------
-sensor_msgs::PointCloud2 transformPointCloud(const sensor_msgs::PointCloud2& input_cloud, const Eigen::Matrix<float, 4, 4>& tf) {
-    sensor_msgs::PointCloud2 output_cloud = input_cloud;
+sensor_msgs::msg::PointCloud2 transformPointCloud(const sensor_msgs::msg::PointCloud2& input_cloud, const Eigen::Matrix<float, 4, 4>& tf) {
+    sensor_msgs::msg::PointCloud2 output_cloud = input_cloud;
 
     // Extracting row and column dimensions from the input cloud
     int num_points = input_cloud.width * input_cloud.height;
@@ -135,16 +135,16 @@ sensor_msgs::PointCloud2 transformPointCloud(const sensor_msgs::PointCloud2& inp
 
     // Ensure that the data size matches the expected format
     if (input_cloud.fields.size() < 3 ||
-        input_cloud.fields[0].datatype != sensor_msgs::PointField::FLOAT32 ||
-        input_cloud.fields[1].datatype != sensor_msgs::PointField::FLOAT32 ||
-        input_cloud.fields[2].datatype != sensor_msgs::PointField::FLOAT32 ||
+        input_cloud.fields[0].datatype != sensor_msgs::msg::PointField::FLOAT32 ||
+        input_cloud.fields[1].datatype != sensor_msgs::msg::PointField::FLOAT32 ||
+        input_cloud.fields[2].datatype != sensor_msgs::msg::PointField::FLOAT32 ||
         point_step < 3 * sizeof(float)) {
         // Throw an error or handle the invalid input format as necessary
         return output_cloud;
     }
 
     // Accessing the raw data buffer
-    const uint8_t* data_ptr = input_cloud.data.data();
+    uint8_t* data_ptr = output_cloud.data.data();
 
     // Iterate through each point and apply the transformation
     for (int i = 0; i < num_points; ++i) {
@@ -173,26 +173,26 @@ sensor_msgs::PointCloud2 transformPointCloud(const sensor_msgs::PointCloud2& inp
 class PointCloudAligner : public rclcpp::Node
 {
 public:
-    PointCloudAligner() : Node("pcl_concat")
-    {
-        // Subscribe to the left and right point cloud topics
+    PointCloudAligner() : Node("pcl_concat") {
+        
+        // Subscribe to the RS_Lidar topics
         subscription_L_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            "/input_cloud_1",
+            "/rslidar/helios_L",
             10,
             std::bind(&PointCloudAligner::leftCallback, this, std::placeholders::_1));
 
         subscription_R_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            "/input_cloud_2",
+            "/rslidar/helios_R",
             10,
             std::bind(&PointCloudAligner::rightCallback, this, std::placeholders::_1));
         
         subscription_front_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            "/input_cloud_3",
+            "/rslidar/M1P",
             10,
             std::bind(&PointCloudAligner::frontCallback, this, std::placeholders::_1));
 
         // Publish the combined point cloud
-        publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/output_cloud", 10);
+        publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/rslidar/combined", 10);
     }
 
 
@@ -231,10 +231,9 @@ private:
             if (max_difference < 0.0015) // seconds
             {
             // 1) Concat helios L + helios R
-                sensor_msgs::msg::PointCloud2 combined_cloud;
-                if (pcl::concatenatePointCloud(left_cloud_, right_cloud_, combined_cloud)) {
-                    combined_cloud.header = left_cloud_.header;
-                    
+                sensor_msgs::msg::PointCloud2 combined_cloud_back;
+                if (pcl::concatenatePointCloud(left_cloud_, right_cloud_, combined_cloud_back)) {
+                    combined_cloud_back.header = left_cloud_.header;
                     }
                 
                 else {
@@ -243,14 +242,20 @@ private:
 
             // 2) Calculate TF
                 // Source = M1P , Target = heliosL+R
-                const Eigen::Matrix<float, 4, 4>& tf = calculate_tf(combined_cloud, front_cloud_);
+                const Eigen::Matrix<float, 4, 4>& tf = calculate_tf(combined_cloud_back, front_cloud_);
 
             // 3) Transform M1P 
-            
+                sensor_msgs::msg::PointCloud2 front_cloud = transformPointCloud(front_cloud_, tf);
 
-            // 4) Concat HeliosL+R + M1P
-                
-                // publisher_->publish(combined_cloud); 
+            // 4) Concat HeliosL+R + M1P + PUBLISH
+                sensor_msgs::msg::PointCloud2 combined_cloud_all;
+                if (pcl::concatenatePointCloud(left_cloud_, right_cloud_, combined_cloud_all)) {
+                    combined_cloud_all.header = left_cloud_.header;
+                    publisher_->publish(combined_cloud_all); 
+                    }
+                else {
+                    std::cerr << "Error concatenating point clouds." << std::endl;
+                }
             }
         }
     }
