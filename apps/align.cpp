@@ -48,8 +48,8 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr align(boost::shared_ptr<pcl::Registration<pc
     registration->align(*aligned);
   }
   auto t3 = system_clock.now();
-  std::cout << "10times: " << (t3 - t2).seconds() * 1000 << "[msec]" << std::endl;
-  std::cout << "fitness: " << registration->getFitnessScore() << std::endl << std::endl;
+//   std::cout << "10times: " << (t3 - t2).seconds() * 1000 << "[msec]" << std::endl;
+//   std::cout << "fitness: " << registration->getFitnessScore() << std::endl << std::endl;
 
   return aligned;
 }
@@ -108,8 +108,8 @@ const Eigen::Matrix<float, 4, 4>& calculate_tf(const sensor_msgs::msg::PointClou
 
     // GET TRANS_MATRIX AND PRINT
     const Eigen::Matrix<float, 4, 4>& trans_matrix = ndt_omp->printFinalTransformation();
-    std::cout << "Transformation Matrix:" << std::endl;
-    std::cout << trans_matrix << std::endl;
+    // std::cout << "Transformation Matrix:" << std::endl;
+    // std::cout << trans_matrix << std::endl;
 
     // visulization: Yellow is aligned to red as color blue
     // pcl::visualization::PCLVisualizer vis("vis");
@@ -180,41 +180,44 @@ public:
         // SUBSCRIBERS
         subscription_L_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
             "/rslidar/helios_L", //topic_name,
-            1,                  // qos_history_depth
+            10,                  // qos_history_depth
             std::bind(&PointCloudAligner::leftCallback, this, std::placeholders::_1) // callback
             ); 
 
         subscription_R_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
             "/rslidar/helios_R",
-            1,
+            10,
             std::bind(&PointCloudAligner::rightCallback, this, std::placeholders::_1)
             );
         
         subscription_front_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
             "/rslidar/M1P",
-            1,
+            10,
             std::bind(&PointCloudAligner::frontCallback, this, std::placeholders::_1));
 
-        // publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
-        //     "/rslidar/combined", // topic_name
-        //     10 // qos_history_depth
-        //     );
-
         // PUBLISHER
-        rclcpp::QoS qos_profile(10); // history_depth
-        qos_profile.durability(rmw_qos_durability_policy_t::RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL); 
+
         publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
             "/rslidar/combined", // topic_name
-            qos_profile // QoS profile // qos_history_depth
+            1 // qos_history_depth
             );
+
+        // rclcpp::QoS qos_profile(10); // history_depth
+        // qos_profile.durability(rmw_qos_durability_policy_t::RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL); 
+        // publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
+        //     "/rslidar/combined", // topic_name
+        //     qos_profile // QoS profile // qos_history_depth
+        //     );
     }
 
 private:
     void leftCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
-    {left_cloud_ = *msg;}
+    {left_cloud_ = *msg;
+    AlignAndPublish();}
 
     void rightCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
-    {right_cloud_ = *msg;}
+    {right_cloud_ = *msg;
+    AlignAndPublish();}
 
     void frontCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
     {front_cloud_ = *msg;
@@ -233,11 +236,11 @@ private:
                                                    std::abs(left_timestamp - front_timestamp) * 1e-9, 
                                                    std::abs(right_timestamp - front_timestamp) * 1e-9});
 
-            std::cout << "TS left: " << left_timestamp << " && TS Right: " << right_timestamp << " && TS Front: " << right_timestamp << std::endl;
+            // std::cout << "TS left: " << left_timestamp << " && TS Right: " << right_timestamp << " && TS Front: " << right_timestamp << std::endl;
             std::cout << "Max time difference:" << max_difference << " s" << std::endl;
 
             // if (max_difference < 0.0015) // seconds
-            if (max_difference < 0.001) {
+            if (max_difference < 0.003) {
 
             // 1) Concat helios L + helios R
                 sensor_msgs::msg::PointCloud2 combined_cloud_back;
