@@ -98,7 +98,7 @@ const Eigen::Matrix<float, 4, 4>& calculate_tf(const sensor_msgs::msg::PointClou
 
     for(int n : num_threads) {
         for(const auto& search_method : search_methods) {
-            std::cout << "--- pclomp::NDT (" << search_method.first << ", " << n << " threads) ---" << std::endl;
+            // std::cout << "--- pclomp::NDT (" << search_method.first << ", " << n << " threads) ---" << std::endl;
             ndt_omp->setNumThreads(n);
             ndt_omp->setNeighborhoodSearchMethod(search_method.second);
             aligned = align(ndt_omp, target_cloud, source_cloud);
@@ -111,14 +111,14 @@ const Eigen::Matrix<float, 4, 4>& calculate_tf(const sensor_msgs::msg::PointClou
     std::cout << trans_matrix << std::endl;
 
     // visulization: Yellow is aligned to red as color blue
-    pcl::visualization::PCLVisualizer vis("vis");
-    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> target_handler(target_cloud, 255.0, 0.0, 0.0);    // red
-    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> source_handler(source_cloud, 255.0, 255.0, 0.0);  // yelloy
-    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> aligned_handler(aligned, 0.0, 0.0, 255.0);        // blue
-    vis.addPointCloud(target_cloud, target_handler, "target");
-    vis.addPointCloud(source_cloud, source_handler, "source");
-    vis.addPointCloud(aligned, aligned_handler, "aligned");
-    vis.spin();
+    // pcl::visualization::PCLVisualizer vis("vis");
+    // pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> target_handler(target_cloud, 255.0, 0.0, 0.0);    // red
+    // pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> source_handler(source_cloud, 255.0, 255.0, 0.0);  // yelloy
+    // pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> aligned_handler(aligned, 0.0, 0.0, 255.0);        // blue
+    // vis.addPointCloud(target_cloud, target_handler, "target");
+    // vis.addPointCloud(source_cloud, source_handler, "source");
+    // vis.addPointCloud(aligned, aligned_handler, "aligned");
+    // vis.spin();
 
     return trans_matrix;
 }
@@ -220,15 +220,18 @@ private:
         if (!left_cloud_.data.empty() && !right_cloud_.data.empty() && !front_cloud_.data.empty())
         {   
             // Check if pointclouds are recorded close to each other:
-            long int left_timestamp = left_cloud_.header.stamp.nanosec;
-            long int right_timestamp = right_cloud_.header.stamp.nanosec;
-            long int front_timestamp = front_cloud_.header.stamp.nanosec;
+            long int left_timestamp = left_cloud_.header.stamp.nanosec + left_cloud_.header.stamp.sec * 1e9;
+            long int right_timestamp = right_cloud_.header.stamp.nanosec + right_cloud_.header.stamp.sec * 1e9;
+            long int front_timestamp = front_cloud_.header.stamp.nanosec + front_cloud_.header.stamp.sec * 1e9;
             long double max_difference = std::max({std::abs(left_timestamp - right_timestamp) * 1e-9,
                                                    std::abs(left_timestamp - front_timestamp) * 1e-9, 
                                                    std::abs(right_timestamp - front_timestamp) * 1e-9});
-            std::cout << "Time difference:" << max_difference << " s" << std::endl;
 
-            if (max_difference < 0.0015) // seconds
+            std::cout << "TS left: " << left_timestamp << " && TS Right: " << right_timestamp << " && TS Front: " << right_timestamp << std::endl;
+            std::cout << "Max time difference:" << max_difference << " s" << std::endl;
+
+            // if (max_difference < 0.0015) // seconds
+            if (max_difference < 0.01)
             {
             // 1) Concat helios L + helios R
                 sensor_msgs::msg::PointCloud2 combined_cloud_back;
