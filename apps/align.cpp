@@ -42,7 +42,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr align(boost::shared_ptr<pcl::Registration<pc
   auto t1 = system_clock.now();
   registration->align(*aligned);
   auto t2 = system_clock.now();
-  std::cout << "single : " << (t2 - t1).seconds()* 1000 << "[msec]" << std::endl;
+//   std::cout << "single : " << (t2 - t1).seconds()* 1000 << "[msec]" << std::endl;
 
   for(int i=0; i<10; i++) {
     registration->align(*aligned);
