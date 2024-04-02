@@ -252,12 +252,12 @@ private:
                                                    std::abs(right_timestamp - front_timestamp) * 1e-9});
 
             // std::cout << "TS left: " << left_timestamp << " && TS Right: " << right_timestamp << " && TS Front: " << right_timestamp << std::endl;
-            std::cout << "Max time difference:" << max_difference << " s" << std::endl;
+            // std::cout << "Max time difference:" << max_difference << " s" << std::endl;
 
             // if (max_difference < 0.0015) // seconds
             // TODO: IF DIFF between HELIOS_L and R < 0.0015 and between M1P and heliosses < 0.1:
             if (max_difference_back < 0.0015) {
-                if (max_difference < 0.05) {
+                if (max_difference < 0.1) {
 
                 // 1) Concat helios L + helios R
                     sensor_msgs::msg::PointCloud2 combined_cloud_back;
