@@ -183,8 +183,8 @@ public:
             // Set quality of services (QoS)
             rmw_qos_profile_t qos_sub = rmw_qos_profile_default;
             qos_sub.history=RMW_QOS_POLICY_HISTORY_KEEP_LAST;
-            qos_sub.depth=20;
-            qos_sub.reliability=RMW_QOS_POLICY_RELIABILITY_RELIABLE;
+            qos_sub.depth=10;
+            // qos_sub.reliability=RMW_QOS_POLICY_RELIABILITY_RELIABLE;
             qos_sub.durability=RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
             rclcpp::QoS qos_profile_sub = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(qos_sub));
 
@@ -210,26 +210,26 @@ public:
             // Set quality of services (QoS)
             rmw_qos_profile_t qos_pub = rmw_qos_profile_default;
             qos_pub.history=RMW_QOS_POLICY_HISTORY_KEEP_LAST;
-            qos_pub.depth=20;
+            qos_pub.depth=10;
             qos_pub.reliability=RMW_QOS_POLICY_RELIABILITY_RELIABLE;
             qos_pub.durability=RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
             rclcpp::QoS qos_profile_pub = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(qos_sub));
 
         publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
             "/rslidar/combined", // topic_name
-            qos_profile_pub // QoS profile // qos_history_depth
+            qos_profile_pub
             );
     }
 
 private:
     void leftCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
     {left_cloud_ = *msg;
-    // AlignAndPublish();
+    AlignAndPublish();
     }
 
     void rightCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
     {right_cloud_ = *msg;
-    // AlignAndPublish();
+    AlignAndPublish();
     }
 
     void frontCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
@@ -275,7 +275,8 @@ private:
                 // 4) Concat HeliosL+R + M1P + PUBLISH
                     sensor_msgs::msg::PointCloud2 combined_cloud_all;
                     if (pcl::concatenatePointCloud(front_cloud, combined_cloud_back, combined_cloud_all)) {
-                        combined_cloud_all.header = front_cloud_.header;
+                        combined_cloud_all.header.stamp = front_cloud_.header.stamp;
+                        combined_cloud_all.header.frame_id = "rs_all";
                         publisher_->publish(combined_cloud_all); 
                         }
                     else {std::cerr << "Error concatenating point clouds." << std::endl;}
