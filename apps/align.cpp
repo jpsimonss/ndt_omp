@@ -36,18 +36,19 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr align(boost::shared_ptr<pcl::Registration<pc
   registration->setInputSource(source_cloud);
   pcl::PointCloud<pcl::PointXYZ>::Ptr aligned(new pcl::PointCloud<pcl::PointXYZ>());
 
-  rclcpp::Clock system_clock;
+//   rclcpp::Clock system_clock;
 
-  ///auto t1 = ros::WallTime::now();
-  auto t1 = system_clock.now();
+//   /auto t1 = ros::WallTime::now();
+//   auto t1 = system_clock.now();
   registration->align(*aligned);
-  auto t2 = system_clock.now();
+//   auto t2 = system_clock.now();
 //   std::cout << "single : " << (t2 - t1).seconds()* 1000 << "[msec]" << std::endl;
+
 
   for(int i=0; i<10; i++) {
     registration->align(*aligned);
   }
-  auto t3 = system_clock.now();
+//   auto t3 = system_clock.now();
 //   std::cout << "10times: " << (t3 - t2).seconds() * 1000 << "[msec]" << std::endl;
 //   std::cout << "fitness: " << registration->getFitnessScore() << std::endl << std::endl;
 
@@ -90,8 +91,9 @@ const Eigen::Matrix<float, 4, 4>& calculate_tf(const sensor_msgs::msg::PointClou
     pcl::PointCloud<pcl::PointXYZ>::Ptr aligned;
     std::vector<int> num_threads = {1, omp_get_max_threads()};
     std::vector<std::pair<std::string, pclomp::NeighborSearchMethod>> search_methods = {
-        // {"DIRECT7", pclomp::DIRECT7},
-        {"DIRECT1", pclomp::DIRECT1}
+        // {"DIRECT26", pclomp::DIRECT26},
+        {"DIRECT7", pclomp::DIRECT7},
+        // {"DIRECT1", pclomp::DIRECT1},
     };
 
     pclomp::NormalDistributionsTransform<pcl::PointXYZ, pcl::PointXYZ>::Ptr ndt_omp(new pclomp::NormalDistributionsTransform<pcl::PointXYZ, pcl::PointXYZ>());
@@ -175,53 +177,65 @@ class PointCloudAligner : public rclcpp::Node
 
 {
 public:
-    PointCloudAligner() : Node("pcl_concat") {
+    PointCloudAligner() : Node("pcl_align_concat") {
         
-        // SUBSCRIBERS
-        subscription_L_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            "/rslidar/helios_L", //topic_name,
-            10,                  // qos_history_depth
-            std::bind(&PointCloudAligner::leftCallback, this, std::placeholders::_1) // callback
-            ); 
+        // Subscribers
+            // Set quality of services (QoS)
+            rmw_qos_profile_t qos_sub = rmw_qos_profile_default;
+            qos_sub.history=RMW_QOS_POLICY_HISTORY_KEEP_LAST;
+            qos_sub.depth=20;
+            qos_sub.reliability=RMW_QOS_POLICY_RELIABILITY_RELIABLE;
+            qos_sub.durability=RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
+            rclcpp::QoS qos_profile_sub = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(qos_sub));
 
+            // Subscribe helios L
+        subscription_L_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
+            "/rslidar/helios_L",
+            qos_profile_sub,
+            std::bind(&PointCloudAligner::leftCallback, this, std::placeholders::_1));
+
+            // Subscribe helios R
         subscription_R_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
             "/rslidar/helios_R",
-            10,
-            std::bind(&PointCloudAligner::rightCallback, this, std::placeholders::_1)
-            );
-        
+            qos_profile_sub,
+            std::bind(&PointCloudAligner::rightCallback, this, std::placeholders::_1));
+
+            // Subscribe helios Front
         subscription_front_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
             "/rslidar/M1P",
-            10,
+            qos_profile_sub,
             std::bind(&PointCloudAligner::frontCallback, this, std::placeholders::_1));
 
-        // PUBLISHER
+        // PUBLISHER: 
+            // Set quality of services (QoS)
+            rmw_qos_profile_t qos_pub = rmw_qos_profile_default;
+            qos_pub.history=RMW_QOS_POLICY_HISTORY_KEEP_LAST;
+            qos_pub.depth=20;
+            qos_pub.reliability=RMW_QOS_POLICY_RELIABILITY_RELIABLE;
+            qos_pub.durability=RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
+            rclcpp::QoS qos_profile_pub = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(qos_sub));
 
         publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
             "/rslidar/combined", // topic_name
-            1 // qos_history_depth
+            qos_profile_pub // QoS profile // qos_history_depth
             );
-
-        // rclcpp::QoS qos_profile(10); // history_depth
-        // qos_profile.durability(rmw_qos_durability_policy_t::RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL); 
-        // publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
-        //     "/rslidar/combined", // topic_name
-        //     qos_profile // QoS profile // qos_history_depth
-        //     );
     }
 
 private:
     void leftCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
     {left_cloud_ = *msg;
-    AlignAndPublish();}
+    // AlignAndPublish();
+    }
 
     void rightCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
     {right_cloud_ = *msg;
-    AlignAndPublish();}
+    // AlignAndPublish();
+    }
 
     void frontCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
     {front_cloud_ = *msg;
-    AlignAndPublish();}
+    AlignAndPublish();
+    }
 
 
     void AlignAndPublish()
@@ -232,6 +246,7 @@ private:
             long int left_timestamp = left_cloud_.header.stamp.nanosec + left_cloud_.header.stamp.sec * 1e9;
             long int right_timestamp = right_cloud_.header.stamp.nanosec + right_cloud_.header.stamp.sec * 1e9;
             long int front_timestamp = front_cloud_.header.stamp.nanosec + front_cloud_.header.stamp.sec * 1e9;
+            long double max_difference_back = std::abs(left_timestamp - right_timestamp) * 1e-9;
             long double max_difference = std::max({std::abs(left_timestamp - right_timestamp) * 1e-9,
                                                    std::abs(left_timestamp - front_timestamp) * 1e-9, 
                                                    std::abs(right_timestamp - front_timestamp) * 1e-9});
@@ -240,30 +255,31 @@ private:
             std::cout << "Max time difference:" << max_difference << " s" << std::endl;
 
             // if (max_difference < 0.0015) // seconds
-            if (max_difference < 0.003) {
+            // TODO: IF DIFF between HELIOS_L and R < 0.0015 and between M1P and heliosses < 0.1:
+            if (max_difference_back < 0.0015) {
+                if (max_difference < 0.05) {
 
-            // 1) Concat helios L + helios R
-                sensor_msgs::msg::PointCloud2 combined_cloud_back;
-                if (pcl::concatenatePointCloud(left_cloud_, right_cloud_, combined_cloud_back)) {
-                    combined_cloud_back.header = left_cloud_.header;
-                    }
-                
-                else {std::cerr << "Error concatenating point clouds." << std::endl;}
+                // 1) Concat helios L + helios R
+                    sensor_msgs::msg::PointCloud2 combined_cloud_back;
+                    if (pcl::concatenatePointCloud(left_cloud_, right_cloud_, combined_cloud_back)) {
+                        combined_cloud_back.header = left_cloud_.header;
+                        }
+                    else {std::cerr << "Error concatenating point clouds." << std::endl;}
 
-            // 2) Calculate TF
-                const Eigen::Matrix<float, 4, 4>& tf = calculate_tf(combined_cloud_back, front_cloud_);
+                // 2) Calculate TF
+                    const Eigen::Matrix<float, 4, 4>& tf = calculate_tf(combined_cloud_back, front_cloud_);
 
-            // 3) Transform M1P 
-                sensor_msgs::msg::PointCloud2 front_cloud = transformPointCloud(front_cloud_, tf);
+                // 3) Transform M1P 
+                    sensor_msgs::msg::PointCloud2 front_cloud = transformPointCloud(front_cloud_, tf);
 
-            // 4) Concat HeliosL+R + M1P + PUBLISH
-                sensor_msgs::msg::PointCloud2 combined_cloud_all;
-                if (pcl::concatenatePointCloud(front_cloud, combined_cloud_back, combined_cloud_all)) {
-                    combined_cloud_all.header = front_cloud_.header;
-                    publisher_->publish(combined_cloud_all); 
-                    }
-                else {std::cerr << "Error concatenating point clouds." << std::endl;}
-            }
+                // 4) Concat HeliosL+R + M1P + PUBLISH
+                    sensor_msgs::msg::PointCloud2 combined_cloud_all;
+                    if (pcl::concatenatePointCloud(front_cloud, combined_cloud_back, combined_cloud_all)) {
+                        combined_cloud_all.header = front_cloud_.header;
+                        publisher_->publish(combined_cloud_all); 
+                        }
+                    else {std::cerr << "Error concatenating point clouds." << std::endl;}
+            }}
         }
     }
 
