@@ -182,11 +182,11 @@ public:
         // Subscribers
             // Set quality of services (QoS)
             rmw_qos_profile_t qos_sub = rmw_qos_profile_default;
-            qos_sub.history=RMW_QOS_POLICY_HISTORY_KEEP_LAST;
-            qos_sub.depth=10;
-            // qos_sub.reliability=RMW_QOS_POLICY_RELIABILITY_RELIABLE;
-            qos_sub.durability=RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
-            rclcpp::QoS qos_profile_sub = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(qos_sub));
+            // qos_sub.history=RMW_QOS_POLICY_HISTORY_KEEP_LAST;
+            // qos_sub.depth=10;
+            // // qos_sub.reliability=RMW_QOS_POLICY_RELIABILITY_RELIABLE;
+            // qos_sub.durability=RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
+            // rclcpp::QoS qos_profile_sub = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(qos_sub));
 
             // Subscribe helios L
         subscription_L_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
@@ -209,11 +209,11 @@ public:
         // PUBLISHER: 
             // Set quality of services (QoS)
             rmw_qos_profile_t qos_pub = rmw_qos_profile_default;
-            qos_pub.history=RMW_QOS_POLICY_HISTORY_KEEP_LAST;
-            qos_pub.depth=10;
-            qos_pub.reliability=RMW_QOS_POLICY_RELIABILITY_RELIABLE;
-            qos_pub.durability=RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
-            rclcpp::QoS qos_profile_pub = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(qos_sub));
+            // qos_pub.history=RMW_QOS_POLICY_HISTORY_KEEP_LAST;
+            // qos_pub.depth=10;
+            // qos_pub.reliability=RMW_QOS_POLICY_RELIABILITY_RELIABLE;
+            // qos_pub.durability=RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
+            // rclcpp::QoS qos_profile_pub = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(qos_sub));
 
         publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
             "/rslidar/combined", // topic_name
@@ -252,12 +252,12 @@ private:
                                                    std::abs(right_timestamp - front_timestamp) * 1e-9});
 
             // std::cout << "TS left: " << left_timestamp << " && TS Right: " << right_timestamp << " && TS Front: " << right_timestamp << std::endl;
-            // std::cout << "Max time difference:" << max_difference << " s" << std::endl;
+            std::cout << "Max time difference:" << max_difference << " s" << std::endl;
 
             // if (max_difference < 0.0015) // seconds
             // TODO: IF DIFF between HELIOS_L and R < 0.0015 and between M1P and heliosses < 0.1:
             if (max_difference_back < 0.0015) {
-                if (max_difference < 0.1) {
+                if (max_difference < 0.05) {
 
                 // 1) Concat helios L + helios R
                     sensor_msgs::msg::PointCloud2 combined_cloud_back;
