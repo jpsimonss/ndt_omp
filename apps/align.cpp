@@ -20,6 +20,11 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <rclcpp/qos.hpp>
 
+// For the synchronizing part
+#include <message_filters/subscriber.h>
+#include <message_filters/synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
+
 // IF EIGEN issues::
   // sudo ln -s /usr/include/eigen3/Eigen /usr/include/Eigen
   // sudo ln -s /usr/include/eigen3/unsupported/Eigen /usr/include/unsupported/Eigen
@@ -173,70 +178,43 @@ sensor_msgs::msg::PointCloud2 transformPointCloud(const sensor_msgs::msg::PointC
 }
 
 
-class PointCloudAligner : public rclcpp::Node
-
-{
+class PointCloudAligner : public rclcpp::Node {
 public:
-    PointCloudAligner() : Node("pcl_align_concat") {
+    PointCloudAligner() : Node("lidar_sync_and_align") {
         
-        // Subscribers
-            // Set quality of services (QoS)
-            rmw_qos_profile_t qos_sub = rmw_qos_profile_default;
-            // qos_sub.history=RMW_QOS_POLICY_HISTORY_KEEP_LAST;
-            // qos_sub.depth=10;
-            // // qos_sub.reliability=RMW_QOS_POLICY_RELIABILITY_RELIABLE;
-            // qos_sub.durability=RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
-            // rclcpp::QoS qos_profile_sub = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(qos_sub));
-
-            // Subscribe helios L
-        subscription_L_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            "/rslidar/helios_L",
-            qos_profile_sub,
-            std::bind(&PointCloudAligner::leftCallback, this, std::placeholders::_1));
-
-            // Subscribe helios R
-        subscription_R_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            "/rslidar/helios_R",
-            qos_profile_sub,
-            std::bind(&PointCloudAligner::rightCallback, this, std::placeholders::_1));
-
-            // Subscribe helios Front
-        subscription_front_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            "/rslidar/M1P",
-            qos_profile_sub,
-            std::bind(&PointCloudAligner::frontCallback, this, std::placeholders::_1));
-
         // PUBLISHER: 
-            // Set quality of services (QoS)
-            rmw_qos_profile_t qos_pub = rmw_qos_profile_default;
-            // qos_pub.history=RMW_QOS_POLICY_HISTORY_KEEP_LAST;
-            // qos_pub.depth=10;
-            // qos_pub.reliability=RMW_QOS_POLICY_RELIABILITY_RELIABLE;
-            // qos_pub.durability=RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
-            // rclcpp::QoS qos_profile_pub = rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(qos_sub));
-
+        rclcpp::QoS qos(10);
         publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
             "/rslidar/combined", // topic_name
-            qos_profile_pub
+            qos
             );
+
+        // SUBSCRIBERS
+        auto rmw_qos_profile = qos.get_rmw_qos_profile();
+        subscription_L_.subscribe(this, "/rslidar/helios_L",rmw_qos_profile);
+        subscription_R_.subscribe(this, "/rslidar/helios_R", rmw_qos_profile);
+        subscription_front_.subscribe(this, "/rslidar/M1P", rmw_qos_profile);
+
+        // Initiate approximatetime syncer and run its callback
+        sync_ = std::make_shared<message_filters::Synchronizer<message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::PointCloud2, 
+                sensor_msgs::msg::PointCloud2, sensor_msgs::msg::PointCloud2>>> (10, subscription_L_, subscription_R_, subscription_front_);
+        sync_->registerCallback(&PointCloudAligner::pointcloudCallback, this);
     }
 
 private:
-    void leftCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
-    {left_cloud_ = *msg;
-    AlignAndPublish();
-    }
 
-    void rightCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
-    {right_cloud_ = *msg;
-    AlignAndPublish();
-    }
+    void pointcloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr& pc_msg_L,
+                            const sensor_msgs::msg::PointCloud2::SharedPtr& pc_msg_R,
+                            const sensor_msgs::msg::PointCloud2::SharedPtr& pc_msg_M1P) {
+        // Debug
+        // std::cout<<"Hello messages are being received, syncing them" << std::endl;
 
-    void frontCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
-    {front_cloud_ = *msg;
-    AlignAndPublish();
-    }
+        left_cloud_ = *pc_msg_L;
+        right_cloud_ = *pc_msg_R;
+        front_cloud_ = *pc_msg_M1P;
 
+        AlignAndPublish();
+    }
 
     void AlignAndPublish()
     {
@@ -246,18 +224,16 @@ private:
             long int left_timestamp = left_cloud_.header.stamp.nanosec + left_cloud_.header.stamp.sec * 1e9;
             long int right_timestamp = right_cloud_.header.stamp.nanosec + right_cloud_.header.stamp.sec * 1e9;
             long int front_timestamp = front_cloud_.header.stamp.nanosec + front_cloud_.header.stamp.sec * 1e9;
-            long double max_difference_back = std::abs(left_timestamp - right_timestamp) * 1e-9;
             long double max_difference = std::max({std::abs(left_timestamp - right_timestamp) * 1e-9,
                                                    std::abs(left_timestamp - front_timestamp) * 1e-9, 
                                                    std::abs(right_timestamp - front_timestamp) * 1e-9});
 
             // std::cout << "TS left: " << left_timestamp << " && TS Right: " << right_timestamp << " && TS Front: " << right_timestamp << std::endl;
-            std::cout << "Max time difference:" << max_difference << " s" << std::endl;
+            // std::cout << "Max time difference:" << max_difference << " s" << std::endl;
 
             // if (max_difference < 0.0015) // seconds
             // TODO: IF DIFF between HELIOS_L and R < 0.0015 and between M1P and heliosses < 0.1:
-            if (max_difference_back < 0.0015) {
-                if (max_difference < 0.05) {
+            if (max_difference < 0.0015) {
 
                 // 1) Concat helios L + helios R
                     sensor_msgs::msg::PointCloud2 combined_cloud_back;
@@ -280,25 +256,35 @@ private:
                         publisher_->publish(combined_cloud_all); 
                         }
                     else {std::cerr << "Error concatenating point clouds." << std::endl;}
-            }}
+            }
         }
     }
 
+    // Defining variables
     sensor_msgs::msg::PointCloud2 left_cloud_;
     sensor_msgs::msg::PointCloud2 right_cloud_;
     sensor_msgs::msg::PointCloud2 front_cloud_;
+    message_filters::Subscriber<sensor_msgs::msg::PointCloud2> subscription_L_;
+    message_filters::Subscriber<sensor_msgs::msg::PointCloud2> subscription_R_;
+    message_filters::Subscriber<sensor_msgs::msg::PointCloud2> subscription_front_;
 
-    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_L_;
-    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_R_;
-    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_front_;
+    std::shared_ptr<message_filters::Synchronizer<message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::PointCloud2, 
+                sensor_msgs::msg::PointCloud2, sensor_msgs::msg::PointCloud2>>> sync_;
+
+    // rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_L_;
+    // rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_R_;
+    // rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_front_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher_;
+    // std::shared_ptr<TimeSynchronizer<sensor_msgs::msg::PointCloud2,
+    //                                   sensor_msgs::msg::PointCloud2,
+    //                                   sensor_msgs::msg::PointCloud2>> synchronizer_;
+
 };
 
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<PointCloudAligner>();
-    rclcpp::spin(node);
+    rclcpp::spin(std::make_shared<PointCloudAligner>());
     rclcpp::shutdown();
     return 0;
 }
