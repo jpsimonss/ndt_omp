@@ -33,7 +33,6 @@
 // ----------------------
 // FUNCTION: align point clouds and measure processing time
 // ----------------------
-
 pcl::PointCloud<pcl::PointXYZ>::Ptr align(boost::shared_ptr<pcl::Registration<pcl::PointXYZ, pcl::PointXYZ>> registration, 
                                           const pcl::PointCloud<pcl::PointXYZ>::Ptr& target_cloud, 
                                           const pcl::PointCloud<pcl::PointXYZ>::Ptr& source_cloud ) {
@@ -64,7 +63,6 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr align(boost::shared_ptr<pcl::Registration<pc
 // FUNCTION: Calculate TF
 // ----------------------
 using PointCloudXYZ = pcl::PointCloud<pcl::PointXYZ>;
-
 const Eigen::Matrix<float, 4, 4>& calculate_tf(const sensor_msgs::msg::PointCloud2& target_cloud_,
                                                 const sensor_msgs::msg::PointCloud2& source_cloud_) {
     
@@ -183,7 +181,7 @@ public:
     PointCloudAligner() : Node("lidar_sync_and_align") {
         
         // PUBLISHER: 
-        rclcpp::QoS qos(10);
+        rclcpp::QoS qos(50);
         publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
             "/rslidar/combined", // topic_name
             qos
@@ -197,7 +195,7 @@ public:
 
         // Initiate approximatetime syncer and run its callback
         sync_ = std::make_shared<message_filters::Synchronizer<message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::PointCloud2, 
-                sensor_msgs::msg::PointCloud2, sensor_msgs::msg::PointCloud2>>> (10, subscription_L_, subscription_R_, subscription_front_);
+                sensor_msgs::msg::PointCloud2, sensor_msgs::msg::PointCloud2>>> (100, subscription_L_, subscription_R_, subscription_front_);
         sync_->registerCallback(&PointCloudAligner::pointcloudCallback, this);
     }
 
@@ -229,11 +227,10 @@ private:
                                                    std::abs(right_timestamp - front_timestamp) * 1e-9});
 
             // std::cout << "TS left: " << left_timestamp << " && TS Right: " << right_timestamp << " && TS Front: " << right_timestamp << std::endl;
-            // std::cout << "Max time difference:" << max_difference << " s" << std::endl;
+            std::cout << "Max time difference:" << max_difference << " s" << std::endl;
 
-            // if (max_difference < 0.0015) // seconds
-            // TODO: IF DIFF between HELIOS_L and R < 0.0015 and between M1P and heliosses < 0.1:
-            if (max_difference < 0.0015) {
+            if (max_difference < 0.01) // 0.01 s ≈ 5 cm inaccuracy for 16 km/h
+            {
 
                 // 1) Concat helios L + helios R
                     sensor_msgs::msg::PointCloud2 combined_cloud_back;
@@ -264,21 +261,14 @@ private:
     sensor_msgs::msg::PointCloud2 left_cloud_;
     sensor_msgs::msg::PointCloud2 right_cloud_;
     sensor_msgs::msg::PointCloud2 front_cloud_;
+
     message_filters::Subscriber<sensor_msgs::msg::PointCloud2> subscription_L_;
     message_filters::Subscriber<sensor_msgs::msg::PointCloud2> subscription_R_;
     message_filters::Subscriber<sensor_msgs::msg::PointCloud2> subscription_front_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher_;
 
     std::shared_ptr<message_filters::Synchronizer<message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::PointCloud2, 
                 sensor_msgs::msg::PointCloud2, sensor_msgs::msg::PointCloud2>>> sync_;
-
-    // rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_L_;
-    // rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_R_;
-    // rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_front_;
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher_;
-    // std::shared_ptr<TimeSynchronizer<sensor_msgs::msg::PointCloud2,
-    //                                   sensor_msgs::msg::PointCloud2,
-    //                                   sensor_msgs::msg::PointCloud2>> synchronizer_;
-
 };
 
 int main(int argc, char **argv)
