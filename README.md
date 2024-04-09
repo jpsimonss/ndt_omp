@@ -9,4 +9,4 @@ Output topic:
 - /rslidar/combined
 
 Run with:
-`ros2 run ndt_omp_ros2 align'
+`ros2 run ndt_omp_ros2 align`
